@@ -3,22 +3,22 @@ package org.eclipse.ui.internal.genericeditor;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.Random;
 import java.util.stream.Collectors;
 
 import org.eclipse.core.resources.IMarker;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.jface.text.BadLocationException;
 import org.eclipse.jface.text.IDocument;
-import org.eclipse.jface.text.Position;
 import org.eclipse.jface.text.codemining.ICodeMiningProvider;
-import org.eclipse.jface.text.codemining.LineContentCodeMining;
+import org.eclipse.jface.text.codemining.LineHeaderCodeMining;
 
 
-public class ProblemMarkerCodeMining extends LineContentCodeMining
+public class ProblemMarkerCodeMining extends LineHeaderCodeMining
 {
   public ProblemMarkerCodeMining(IDocument document, int lineNum, List<IMarker> markers, ICodeMiningProvider provider) throws BadLocationException
   {
-    super(new Position(document.getLineOffset(lineNum)), provider);
+    super(lineNum, document, provider);
 
     final String lineDelimiter = document.getLineDelimiter(lineNum);
 
@@ -27,7 +27,9 @@ public class ProblemMarkerCodeMining extends LineContentCodeMining
 
   private String createLabel(List<IMarker> markers, String lineDelimiter)
   {
-    final String label = markers.stream().map(this::convertMarkerToLabel).filter(Optional::isPresent).map(Optional::get).collect(Collectors.joining(lineDelimiter));
+    //    final String label = markers.stream().map(this::convertMarkerToLabel).filter(Optional::isPresent).map(Optional::get).collect(Collectors.joining(lineDelimiter));
+    final List<String> labels = markers.stream().map(this::convertMarkerToLabel).filter(Optional::isPresent).map(Optional::get).collect(Collectors.toList());
+    final String label = labels.get(new Random().nextInt(labels.size()));
     return label;
   }
 
@@ -62,13 +64,13 @@ public class ProblemMarkerCodeMining extends LineContentCodeMining
       switch ((Integer)severity)
       {
         case IMarker.SEVERITY_ERROR:
-          result.append("E: "); //$NON-NLS-1$
+          result.append("⛔ "); //$NON-NLS-1$
           break;
         case IMarker.SEVERITY_WARNING:
-          result.append("W: "); //$NON-NLS-1$
+          result.append("⚠️ "); //$NON-NLS-1$
           break;
         case IMarker.SEVERITY_INFO:
-          result.append("I: "); //$NON-NLS-1$
+          result.append("ℹ️ "); //$NON-NLS-1$
           break;
         default:
           break;

@@ -21,9 +21,9 @@ import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.jface.text.BadLocationException;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.text.ITextViewer;
+import org.eclipse.jface.text.codemining.AbstractCodeMining;
 import org.eclipse.jface.text.codemining.AbstractCodeMiningProvider;
 import org.eclipse.jface.text.codemining.ICodeMining;
-import org.eclipse.jface.text.codemining.LineContentCodeMining;
 
 
 public class ProblemMarkerCodeMiningProvider extends AbstractCodeMiningProvider
@@ -54,7 +54,7 @@ public class ProblemMarkerCodeMiningProvider extends AbstractCodeMiningProvider
       {
         final IResource resource = extractResource(viewer).get();
         final Map<Optional<Integer>, List<IMarker>> perLine = groupMarkersByLine(resource);
-        final List<LineContentCodeMining> codeMinings = createCodeMinings(viewer.getDocument(), perLine);
+        final List<AbstractCodeMining> codeMinings = createCodeMinings(viewer.getDocument(), perLine);
 
         return codeMinings;
       }
@@ -65,20 +65,20 @@ public class ProblemMarkerCodeMiningProvider extends AbstractCodeMiningProvider
     });
   }
 
-  private List<LineContentCodeMining> createCodeMinings(IDocument document, Map<Optional<Integer>, List<IMarker>> perLine)
+  private List<AbstractCodeMining> createCodeMinings(IDocument document, Map<Optional<Integer>, List<IMarker>> perLine)
   {
     final Stream<Entry<Optional<Integer>, List<IMarker>>> validEntries = perLine.entrySet().stream().filter(entry -> entry.getKey().isPresent());
 
-    final List<LineContentCodeMining> codeMinings = validEntries.map(entry -> {
+    final List<AbstractCodeMining> codeMinings = validEntries.map(entry -> {
       try
       {
         final int lineNum = entry.getKey().get();
-        final LineContentCodeMining codeMining = new ProblemMarkerCodeMining(document, lineNum, entry.getValue(), ProblemMarkerCodeMiningProvider.this);
+        final AbstractCodeMining codeMining = new ProblemMarkerCodeMining(document, lineNum - 1, entry.getValue(), ProblemMarkerCodeMiningProvider.this);
         return Optional.of(codeMining);
       }
       catch (BadLocationException e)
       {
-        return Optional.<LineContentCodeMining> empty();
+        return Optional.<AbstractCodeMining> empty();
       }
     }).filter(Optional::isPresent).map(Optional::get).collect(Collectors.toList());
     return codeMinings;
