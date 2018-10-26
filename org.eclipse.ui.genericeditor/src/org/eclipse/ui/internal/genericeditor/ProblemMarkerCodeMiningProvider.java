@@ -4,12 +4,10 @@ package org.eclipse.ui.internal.genericeditor;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import org.eclipse.core.filebuffers.FileBuffers;
 import org.eclipse.core.resources.IMarker;
@@ -28,7 +26,24 @@ import org.eclipse.jface.text.codemining.ICodeMining;
 
 public class ProblemMarkerCodeMiningProvider extends AbstractCodeMiningProvider
 {
-  private Optional<IResource> extractResource(ITextViewer viewer)
+  @Override
+  public CompletableFuture<List<? extends ICodeMining>> provideCodeMinings(ITextViewer viewer, final IProgressMonitor monitor)
+  {
+    return CompletableFuture.<List<? extends ICodeMining>> supplyAsync(() -> {
+      final Optional<IResource> extractedResource = extractResource(viewer);
+      if (!extractedResource.isPresent())
+      {
+        return Collections.emptyList();
+      }
+      final IResource resource = extractedResource.get();
+      final List<IMarker> markers = getMarkers(resource);
+      final List<AbstractCodeMining> codeMinings = createCodeMinings(viewer.getDocument(), markers, monitor);
+
+      return codeMinings;
+    });
+  }
+
+  private static Optional<IResource> extractResource(ITextViewer viewer)
   {
     final IDocument document = viewer.getDocument();
     if (document == null)
@@ -46,68 +61,36 @@ public class ProblemMarkerCodeMiningProvider extends AbstractCodeMiningProvider
     return Optional.of(resource);
   }
 
-  @Override
-  public CompletableFuture<List<? extends ICodeMining>> provideCodeMinings(ITextViewer viewer, IProgressMonitor monitor)
+  private static List<IMarker> getMarkers(IResource resource)
   {
-    return CompletableFuture.<List<? extends ICodeMining>> supplyAsync(() -> {
-      try
+    try
+    {
+      IMarker[] allMarkers = resource.findMarkers(IMarker.PROBLEM, true, IResource.DEPTH_INFINITE);
+      if (allMarkers != null)
       {
-        final IResource resource = extractResource(viewer).get();
-        final Map<Optional<Integer>, List<IMarker>> perLine = groupMarkersByLine(resource);
-        final List<AbstractCodeMining> codeMinings = createCodeMinings(viewer.getDocument(), perLine);
-
-        return codeMinings;
+        final List<IMarker> result = Arrays.asList(allMarkers);
+        return result;
       }
-      catch (CoreException e)
-      {
-        return Collections.emptyList();
-      }
-    });
+    }
+    catch (CoreException e)
+    {
+      // do nothing
+    }
+    return Collections.emptyList();
   }
 
-  private List<AbstractCodeMining> createCodeMinings(IDocument document, Map<Optional<Integer>, List<IMarker>> perLine)
+  private List<AbstractCodeMining> createCodeMinings(IDocument document, List<IMarker> markers, IProgressMonitor monitor)
   {
-    final Stream<Entry<Optional<Integer>, List<IMarker>>> validEntries = perLine.entrySet().stream().filter(entry -> entry.getKey().isPresent());
-
-    final List<AbstractCodeMining> codeMinings = validEntries.map(entry -> {
+    final List<AbstractCodeMining> result = markers.stream().filter(m -> !monitor.isCanceled()).filter(Objects::nonNull).map(m -> {
       try
       {
-        final int lineNum = entry.getKey().get();
-        final AbstractCodeMining codeMining = new ProblemMarkerCodeMining(document, lineNum - 1, entry.getValue(), ProblemMarkerCodeMiningProvider.this);
-        return Optional.of(codeMining);
+        return Optional.of(new ProblemMarkerCodeMining(document, m, this));
       }
-      catch (BadLocationException e)
+      catch (BadLocationException | IllegalArgumentException e)
       {
         return Optional.<AbstractCodeMining> empty();
       }
     }).filter(Optional::isPresent).map(Optional::get).collect(Collectors.toList());
-    return codeMinings;
-  }
-
-  private Map<Optional<Integer>, List<IMarker>> groupMarkersByLine(IResource resource) throws CoreException
-  {
-    final IMarker[] allMarkers = resource.findMarkers(IMarker.PROBLEM, true, IResource.DEPTH_INFINITE);
-    if (allMarkers == null)
-    {
-      return Collections.emptyMap();
-    }
-
-    final Map<Optional<Integer>, List<IMarker>> perLine = Arrays.stream(allMarkers).collect(Collectors.groupingBy(m -> {
-      try
-      {
-        final Object line = m.getAttribute(IMarker.LINE_NUMBER);
-        if (line instanceof Integer)
-        {
-          return Optional.of((Integer)line);
-        }
-        return Optional.empty();
-      }
-      catch (CoreException e)
-      {
-        return Optional.empty();
-      }
-    }));
-
-    return perLine;
+    return result;
   }
 }
